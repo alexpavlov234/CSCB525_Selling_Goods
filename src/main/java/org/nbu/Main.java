@@ -1,40 +1,54 @@
 package org.nbu;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
         Store store = new Store();
 
-
-        ExecutorService executor = Executors.newFixedThreadPool(4);
-
-        System.out.println("Магазинът отваря врати! Налични касиери: 4\n");
-
+        List<BuyerTask> allTasks = new ArrayList<>();
         for (int i = 1; i <= 10; i++) {
             String buyerName = "Купувач #" + i;
             Map<String, Integer> cart = generateRandomCart();
-
-            BuyerTask task = new BuyerTask(buyerName, store, cart);
-
-            executor.submit(task);
+            allTasks.add(new BuyerTask(buyerName, store, cart));
         }
 
+        System.out.println("Магазинът отваря врати! Подготвени купувачи: " + allTasks.size());
+        System.out.println("Стартиране на обработка с 4 нишки...\n");
 
-        executor.shutdown();
+        Thread[] threads = new Thread[4];
 
-        try {
-            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+        Runnable workerLogic = () -> {
+            while (true) {
+                BuyerTask taskToProcess = null;
+
+                synchronized (allTasks) {
+                    if (!allTasks.isEmpty()) {
+                        taskToProcess = allTasks.remove(0);
+                    }
+                }
+
+                if (taskToProcess == null) {
+                    break;
+                }
+
+                taskToProcess.run();
             }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
+        };
+
+        for (int i = 0; i < 4; i++) {
+            threads[i] = new Thread(workerLogic, "Worker-Thread-" + (i + 1));
+            threads[i].start();
         }
+
+        for (int i = 0; i < 4; i++) {
+            try {
+                threads[i].join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
         store.printInventory();
     }
 
